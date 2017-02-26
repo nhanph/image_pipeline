@@ -106,6 +106,17 @@ int main(int argc, char **argv)
   if (private_nh.getParam("queue_size", queue_size))
     shared_params["queue_size"] = queue_size;
 
+    //added by Nhan
+  int voxelSize;
+  if (private_nh.getParam("voxel_size", voxelSize))
+    shared_params["voxel_size"] = voxelSize;
+
+  bool useVoxel;
+  if (private_nh.getParam("use_voxel", useVoxel))
+    shared_params["use_voxel"] = XmlRpc::XmlRpcValue(useVoxel);
+
+  //end added
+
   nodelet::Loader manager(false); // Don't bring up the manager ROS API
   nodelet::M_string remappings;
   nodelet::V_string my_argv;

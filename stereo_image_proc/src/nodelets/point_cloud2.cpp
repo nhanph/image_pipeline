@@ -51,6 +51,14 @@
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
 
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/radius_outlier_removal.h>
+#include <pcl/filters/conditional_removal.h>
+#include <pcl/filters/statistical_outlier_removal.h>
+
 namespace stereo_image_proc {
 
 using namespace sensor_msgs;
@@ -79,6 +87,9 @@ class PointCloud2Nodelet : public nodelet::Nodelet
   // Processing state (note: only safe because we're single-threaded!)
   image_geometry::StereoCameraModel model_;
   cv::Mat_<cv::Vec3f> points_mat_; // scratch buffer
+
+  int voxelSize;
+  bool useVoxel;
   
   virtual void onInit();
 
@@ -102,6 +113,10 @@ void PointCloud2Nodelet::onInit()
   private_nh.param("queue_size", queue_size, 5);
   bool approx;
   private_nh.param("approximate_sync", approx, false);
+
+//  private_nh.param("voxel_size", voxelSize, 0.01);
+//  private_nh.param("use_voxel", useVoxel, false);
+
   if (approx)
   {
     approximate_sync_.reset( new ApproximateSync(ApproximatePolicy(queue_size),
@@ -261,6 +276,63 @@ void PointCloud2Nodelet::imageCb(const ImageConstPtr& l_image_msg,
     NODELET_WARN_THROTTLE(30, "Could not fill color channel of the point cloud, "
                           "unsupported encoding '%s'", encoding.c_str());
   }
+
+//  if (useVoxel)
+//  {
+
+    // Downsampling using Voxel Grid
+    // Container for original & filtered data
+    pcl::PCLPointCloud2* cloud = new pcl::PCLPointCloud2; 
+    pcl::PCLPointCloud2ConstPtr cloudPtr(cloud);
+    pcl::PCLPointCloud2 cloud_filtered1, cloud_filtered2;
+
+    pcl::PCLPointCloud2* cloudFiltered1 = new pcl::PCLPointCloud2; 
+
+    // Convert to PCL data type
+    pcl_conversions::toPCL(*points_msg, *cloud);
+
+    // Perform the actual filtering
+    pcl::VoxelGrid<pcl::PCLPointCloud2> sor;
+    sor.setInputCloud (cloudPtr);
+    sor.setLeafSize (0.015, 0.015, 0.015);
+//    sor.setLeafSize (voxelSize, voxelSize, voxelSize);
+//    sor.filter (cloud_filtered1);
+
+    sor.filter (*cloudFiltered1);
+
+    pcl::PCLPointCloud2ConstPtr cloudPtr1(cloudFiltered1);
+
+    // Outlier removal
+    // create the radious outlier removal filter
+    pcl::RadiusOutlierRemoval<pcl::PCLPointCloud2> ror;
+
+    // set input cloud
+    ror.setInputCloud(cloudPtr1);
+
+    //set radius for neighbor search
+    ror.setRadiusSearch (0.1);
+
+    //set threshold for minimum required neighbors neighbors
+    ror.setMinNeighborsInRadius(100);
+
+    // do filtering
+    ror.filter(cloud_filtered2);
+
+//    Create the filtering object
+    // pcl::StatisticalOutlierRemoval<pcl::PCLPointCloud2> sor1;
+    // sor1.setInputCloud (cloudPtr1);
+    // sor1.setMeanK (50);
+    // sor1.setStddevMulThresh (1.0);
+    // sor1.filter (cloud_filtered2);
+
+
+
+    // Convert to ROS data type
+//    pcl_conversions::fromPCL(cloudFiltered1, *points_msg);
+//    pcl_conversions::fromPCL(*cloudFiltered1, *points_msg);
+    pcl_conversions::fromPCL(cloud_filtered2, *points_msg);
+
+//  }
 
   pub_points2_.publish(points_msg);
 }
